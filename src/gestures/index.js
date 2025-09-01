@@ -8,10 +8,16 @@ const { maybeSnapCycle, maybeMoveModeSnapSwipes } = require('./snapCycle');
 const { tickDwell } = require('./dwellClick');
 const { maybeThreeSwipeBinding } = require('./threeSwipeBindings');
 
-// wrap into middlewares
+// Pinch bus + init
 function mwPinch(ctx, next){ ctx.bus.on('gesture:pinch', (v)=>handlePinchClick(ctx, v)); pinchClickInit(ctx.state, ctx.persist, ctx.tutor); return next(); }
+
+// Drag helpers
 function mwDrag(ctx, next){ ctx.drag = { maybeStart: ()=>maybeStartDrag(ctx), start3: ()=>startThreeDrag(ctx), end3: ()=>endThreeDrag(ctx) }; return next(); }
+
+// Two-finger scroll
 function mwScroll(ctx, next){ ctx.scroll = { handle: (hand,iBox)=>handleTwoFingerScroll(ctx,hand,iBox) }; return next(); }
+
+// Window modes + snapping
 function mwWindow(ctx, next){
   ctx.window = {
     enter: (mode,ref,hand)=>enterWindowMode(ctx,mode,ref,hand),
@@ -23,27 +29,21 @@ function mwWindow(ctx, next){
   return next();
 }
 
+// Dwell with disabled/stop support
 function mwDwell(ctx, next) {
   ctx.dwell = {
     tick: (opts) => {
-      if (opts && opts.disabled) {
-        ctx.state.dwellAnchor = null;
-        ctx.state.dwellStartTs = 0;
-        return;
-      }
+      if (opts && opts.disabled) { ctx.state.dwellAnchor = null; ctx.state.dwellStartTs = 0; return; }
       return tickDwell(ctx);
     },
-    stop: () => {
-      ctx.state.dwellAnchor = null;
-      ctx.state.dwellStartTs = 0;
-    }
+    stop: () => { ctx.state.dwellAnchor = null; ctx.state.dwellStartTs = 0; }
   };
   return next();
 }
 
+// OS swipes + profile 3F bindings
 function mwOsSwipes(ctx, next){ ctx.os = { swipes: (hand)=>handleOsSwipes(ctx,hand) }; return next(); }
 function mwThreeSwipeBindings(ctx, next){ ctx.threeSwipe = { maybe: (hand,ext)=>maybeThreeSwipeBinding(ctx,hand,ext) }; return next(); }
-
 
 module.exports = [
   mwPinch,
