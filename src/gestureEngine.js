@@ -356,20 +356,24 @@ class GestureEngine {
     await this.ctx.drag.end3?.();
   }
   else if (ext === 2 && this.ctx.isOn('scroll')) {
-    if (st.gcr.canSwitch(ext) && !st.gcr.current()) st.gcr.acquire('scroll', ext);
-    if (st.gcr.current() === 'scroll') {
-      await this.ctx.bus.emit('gesture:pinch', false);
-      await this.ctx.drag.end3?.();
-      await this.ctx.scroll.handle(hand, iBox);
+    // Try zoom first; if zoom handled the frame, skip scroll
+    const didZoom = await this.ctx.zoom?.handle?.(hand, iBox);
+    if (!didZoom) {
+      if (st.gcr.canSwitch(ext) && !st.gcr.current()) st.gcr.acquire('scroll', ext);
+      if (st.gcr.current() === 'scroll') {
+        await this.ctx.bus.emit('gesture:pinch', false);
+        await this.ctx.drag.end3?.();
+        await this.ctx.scroll.handle(hand, iBox);
 
-      if (st.windowMode === 'move') {
-        if (!this._lastTwoCenter) this._lastTwoCenter = localPt;
-        const dx = (localPt.x - this._lastTwoCenter.x);
-        const dy = (localPt.y - this._lastTwoCenter.y);
-        await this.ctx.window.snapSwipes(hand, dx, dy);
+        if (st.windowMode === 'move') {
+          if (!this._lastTwoCenter) this._lastTwoCenter = localPt;
+          const dx = (localPt.x - this._lastTwoCenter.x);
+          const dy = (localPt.y - this._lastTwoCenter.y);
+          await this.ctx.window.snapSwipes(hand, dx, dy);
+        }
       }
+      this._lastTwoCenter = localPt;
     }
-    this._lastTwoCenter = localPt;
   }
   else if (ext === 3 && this.opts.threeFingerDrag && this.ctx.isOn('threeFingerDrag')) {
     if (st.gcr.canSwitch(ext) && !st.gcr.current()) st.gcr.acquire('threeDrag', ext);

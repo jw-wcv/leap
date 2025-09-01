@@ -10,11 +10,25 @@ module.exports = {
   pinchOn: 0.55,
   pinchOff: 0.35,
 
+  // Pinch zoom thresholds (hysteresis)
+  // Use pinchZoomOn to start a pinch zoom, pinchZoomOff to release it (lower than pinchZoomOn)
+  pinchZoomOn: 0.75,
+  pinchZoomOff: 0.55,
+  zoomDistOn: 0.015,
+  zoomDistOff: 0.008,
+  zoomDistToWheelScale: 300,
+
   // Max duration (ms) to treat a pinch as a "tap" (click) when released
   pinchTapMs: 220,
 
   // Scroll scaling for 2F scroll handler (multiplier on delta)
   scrollScale: 1.0,
+  scrollFlickGain:    0.28, // higher = bigger steps
+  scrollStepMin:      1,
+  scrollStepMax:      6,    // 4..6 feels crisp; lower to calm it
+  scrollExpo:         1.0,  // 1.1 for a bit more “pop”
+  scrollInertiaBoost: 1.2,  // >1 for longer glide
+
 
   // Swipe detection (if you use velocity-based swipes)
   swipeMinVel: 900,

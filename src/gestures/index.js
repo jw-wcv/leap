@@ -7,6 +7,7 @@ const { handleOsSwipes } = require('./osSwipes');
 const { maybeSnapCycle, maybeMoveModeSnapSwipes } = require('./snapCycle');
 const { tickDwell } = require('./dwellClick');
 const { maybeThreeSwipeBinding } = require('./threeSwipeBindings');
+const { handleTwoFingerZoom } = require('./zoom'); 
 
 // Pinch bus + init
 function mwPinch(ctx, next){ ctx.bus.on('gesture:pinch', (v)=>handlePinchClick(ctx, v)); pinchClickInit(ctx.state, ctx.persist, ctx.tutor); return next(); }
@@ -45,6 +46,11 @@ function mwDwell(ctx, next) {
 function mwOsSwipes(ctx, next){ ctx.os = { swipes: (hand)=>handleOsSwipes(ctx,hand) }; return next(); }
 function mwThreeSwipeBindings(ctx, next){ ctx.threeSwipe = { maybe: (hand,ext)=>maybeThreeSwipeBinding(ctx,hand,ext) }; return next(); }
 
+function mwZoom(ctx, next) {
+  ctx.zoom = { handle: (hand, iBox) => handleTwoFingerZoom(ctx, hand, iBox) };
+  return next();
+}
+
 module.exports = [
   mwPinch,
   mwDrag,
@@ -53,4 +59,5 @@ module.exports = [
   mwOsSwipes,
   mwThreeSwipeBindings,
   mwDwell,
+  mwZoom,
 ];
