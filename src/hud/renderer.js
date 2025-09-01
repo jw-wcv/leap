@@ -21,7 +21,7 @@ const btnTrainerEnable= document.getElementById('btnTrainerEnable');
 const btnTrainerStart = document.getElementById('btnTrainerStart');
 const btnTrainerStop  = document.getElementById('btnTrainerStop');
 
-// NEW: gestures panel root
+// Gestures panel root
 const gesturesRoot = document.getElementById('settings-gestures');
 
 const ctx = canvas.getContext('2d');
@@ -159,7 +159,7 @@ window.hud.onUpdate((payload) => {
     }
   }
 
-  // NEW: re-render gestures panel if engine pushed new toggle state
+  // Re-render gestures panel if engine pushed new toggle state
   if (payload?.settings?.gestures && gesturesRoot) {
     renderGesturesPanel(gesturesRoot, payload.settings.gestures);
   }

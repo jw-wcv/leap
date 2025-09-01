@@ -27,7 +27,7 @@ const defaults = {
   moveSnapSwipeVel: CFG.moveSnapSwipeVel ?? 800,
   smoothing: CFG.smoothing ?? 0.22,
 
-  // NEW: per-gesture toggles (kept in config and mirrored to engine.persist.gestures)
+  // Per-gesture toggles (kept in config and mirrored to engine.persist.gestures)
   gestures: {
     cursor:          true,
     pinchClick:      true,
@@ -292,7 +292,7 @@ ipcMain.handle('settings:save', (_e, patch) => {
   merged.dwell         = { ...(merged.dwell||{}),         ...(patch.dwell||{}) };
   merged.clicks        = { ...(merged.clicks||{}),        ...(patch.clicks||{}) };
 
-  // NEW: gestures (merge and apply live)
+  // Gestures 
   if (patch.gestures) {
     merged.gestures = { ...(merged.gestures||{}), ...(patch.gestures||{}) };
   }

@@ -1,3 +1,4 @@
+// src/gestures/osSwipes.js
 async function handleOsSwipes(ctx, hand) {
     const { CFG, keyChord, OS, state, tutor } = ctx;
     const v = hand.palmVelocity || [0,0,0]; const [vx, vy] = v;

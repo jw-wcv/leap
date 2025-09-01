@@ -1,3 +1,4 @@
+// src/gestures/threeSwipeBindings.js
 async function maybeThreeSwipeBinding(ctx, hand, ext) {
     if (ext !== 3 || ctx.opts.threeFingerDrag) return false;
     const v = hand.palmVelocity || [0,0,0];

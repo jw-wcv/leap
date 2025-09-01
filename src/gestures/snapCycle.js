@@ -1,3 +1,4 @@
+// src/gestures/snapCycle.js
 async function maybeSnapCycle(ctx, pinchTap, ext) {
     const { state } = ctx;
     if (!pinchTap || state.windowMode !== 'move' || ext !== 4) return;

@@ -1,3 +1,4 @@
+// src/gestures/windowModes.js
 async function enterWindowMode(ctx, mode, refPt, hand) {
     const { state, tutor } = ctx;
     state.windowMode = mode;

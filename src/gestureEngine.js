@@ -228,219 +228,208 @@ class GestureEngine {
   }
 
   async _onFrame(frame) {
-    const st = this.store.get();
-    const hands = Array.isArray(frame.hands) ? frame.hands.length : 0;
-    const iBox = frame.interactionBox;
+  const st = this.store.get();
+  const hands = Array.isArray(frame.hands) ? frame.hands.length : 0;
+  const iBox = frame.interactionBox;
 
-    if (hands > 0) {
-      const v = frame.hands[0].palmVelocity || [0,0,0];
-      this.store.set({ lastPalmVel: Math.hypot(v[0]||0, v[1]||0, v[2]||0) });
-    }
+  // velocity for smoothing / dwell cancel
+  if (hands > 0) {
+    const v = frame.hands[0].palmVelocity || [0,0,0];
+    this.store.set({ lastPalmVel: Math.hypot(v[0]||0, v[1]||0, v[2]||0) });
+  }
 
-    if (hands === 0) {
-      // 1) Hard reset any click/drag/window state + pinch bus
-      try { await this.ctx.bus.emit('gesture:pinch', false); } catch {}
-      if (st.dragging) {
+  // ---- No hands: hard reset and exit
+  if (hands === 0) {
+    try { await this.ctx.bus.emit('gesture:pinch', false); } catch {}
+    if (st.dragging) { await mouse.releaseButton(Button.LEFT); this.store.set({ dragging: false }); }
+    await this.ctx.drag.end3?.();
+    this._lastTwoCenter = null;
+
+    this.ctx.window.exit?.();
+    st.gcr.release();
+
+    this.store.set({ dwellAnchor: null, dwellStartTs: 0, dwellCooldownTs: 0 });
+    this.ctx.dwell?.stop?.();
+
+    this.store.set({ fiveOpenStart: 0, lastFivePinchTs: 0 });
+    try { await this.ctx.window.snapCycle?.(false, 0); } catch {}
+
+    this.onHUD({ hands: 0, profile: this.profiles.current() });
+    return;
+  }
+
+  // ---- One hand data
+  const hand  = frame.hands[0] || {};
+  const pinch = hand.pinchStrength || hand.pinch || 0;
+  const grab  = hand.grabStrength  || hand.grab  || 0;
+  const fingers = Array.isArray(hand.fingers) ? hand.fingers : [];
+  const ext   = fingers.filter(f => f.extended).length;
+
+  // Cursor mapping (always compute localPt for HUD; move only when allowed)
+  let localPt;
+  {
+    const tip = (hand.indexFinger && hand.indexFinger.stabilizedTipPosition) || hand.stabilizedPalmPosition || [0.5,0.5,0];
+    const n = iBox.normalizePoint(tip, true);
+    const nx = Math.max(0, Math.min(1, n[0]));
+    const ny = Math.max(0, Math.min(1, n[1]));
+    localPt = this.ctx._mapToScreen(nx, ny);
+  }
+
+  // Open-palm heuristic (ignore thumb) + deadman grab + clutch (thumb+pinky)
+  const thumb = fingers.find(f => f.type === 0);
+  const pinky = fingers.find(f => f.type === 4);
+  const nonThumbExtended = fingers.filter(f => f.type !== 0 && f.extended).length; // index/middle/ring/pinky
+  const palmOpen  = (nonThumbExtended >= 3) && (grab <= 0.2);
+  const deadman   = (grab >= 0.7);
+  const clutchOn  = !!(thumb?.extended && pinky?.extended); // disable click modes while true
+
+  if (this.ctx.isOn('cursor') && palmOpen && !deadman) {
+    await this._moveMouseSmooth(localPt);
+  }
+
+  // recorder + trainer capture
+  this.ctx.recorder?.capture?.(iBox, hand);
+  this.ctx.trainer?.capture?.(iBox, hand);
+
+  // calibration flow
+  if (st.cal.active) {
+    if (st.cal.step === 'A' && pinch > 0.85) { st.cal.A = { nx: localPt.x, ny: localPt.y }; st.cal.step = 'B'; this.onCalState({ mode:'progress', step:'B' }); }
+    else if (st.cal.step === 'B' && pinch > 0.85) { st.cal.B = { nx: localPt.x, ny: localPt.y }; this._finishCalibration(); }
+    this._emitHUD(ext, pinch, grab, localPt); return;
+  }
+
+  // enter/exit window modes
+  if (ext === 4 && this.ctx.isOn('windowMove')) {
+    if (pinch >= 0.8 && st.windowMode !== 'move' && st.gcr.canSwitch(ext)) this.ctx.window.enter('move', { x: localPt.x, y: localPt.y }, hand);
+    if (pinch <= 0.6 && st.windowMode === 'move') { this.ctx.window.exit(); st.gcr.release(); }
+  } else if (ext >= 5 && this.ctx.isOn('windowResize')) {
+    if (pinch >= 0.8 && st.windowMode !== 'resize' && st.gcr.canSwitch(ext)) this.ctx.window.enter('resize', { x: localPt.x, y: localPt.y }, hand);
+    if (pinch <= 0.6 && st.windowMode === 'resize') { this.ctx.window.exit(); st.gcr.release(); }
+  } else if (ext <= 3 && st.windowMode !== 'none') {
+    this.ctx.window.exit();
+    st.gcr.release();
+  }
+
+  await this.ctx.window.tick({ x: localPt.x, y: localPt.y }, hand);
+
+  // profile three-swipe bindings (when 3F-drag disabled)
+  if (await this.ctx.threeSwipe?.maybe?.(hand, ext)) {
+    this._emitHUD(ext, pinch, grab, localPt);
+    return;
+  }
+
+  // regular gestures
+  if (ext === 1) {
+    // Index-only click (thumb ignored), require a bit of grip
+    const index = hand.indexFinger || fingers.find(f => f.type === 1) || null;
+    const othersExtended = fingers.filter(f => f !== index && f.type !== 0 && f.extended).length;
+    const gripEnough = (grab >= 0.35);
+    const indexOnly  = !!(index && index.extended && othersExtended === 0 && gripEnough && !clutchOn);
+
+    if (
+      this.ctx.isOn('drag') &&
+      (grab >= CFG.grabOn || st.dragging) &&
+      (st.gcr.current() ? st.gcr.current() === 'drag' : st.gcr.acquire('drag', ext))
+    ) {
+      await this.ctx.drag.maybeStart?.();
+      await this.ctx.bus.emit('gesture:pinch', false);
+    } else {
+      if (
+        this.ctx.isOn('pinchClick') &&
+        !st.dragging &&
+        (st.gcr.current() ? st.gcr.current() === 'pinch' : st.gcr.acquire('pinch', ext))
+      ) {
+        await this.ctx.bus.emit('gesture:pinch', indexOnly);
+      } else {
+        await this.ctx.bus.emit('gesture:pinch', false);
+      }
+
+      if (grab <= CFG.grabOff && st.dragging) {
         await mouse.releaseButton(Button.LEFT);
         this.store.set({ dragging: false });
+        st.gcr.release();
+        this._tutor('Drag end');
       }
+    }
+
+    this._lastTwoCenter = null;
+    await this.ctx.drag.end3?.();
+  }
+  else if (ext === 2 && this.ctx.isOn('scroll')) {
+    if (st.gcr.canSwitch(ext) && !st.gcr.current()) st.gcr.acquire('scroll', ext);
+    if (st.gcr.current() === 'scroll') {
+      await this.ctx.bus.emit('gesture:pinch', false);
       await this.ctx.drag.end3?.();
+      await this.ctx.scroll.handle(hand, iBox);
+
+      if (st.windowMode === 'move') {
+        if (!this._lastTwoCenter) this._lastTwoCenter = localPt;
+        const dx = (localPt.x - this._lastTwoCenter.x);
+        const dy = (localPt.y - this._lastTwoCenter.y);
+        await this.ctx.window.snapSwipes(hand, dx, dy);
+      }
+    }
+    this._lastTwoCenter = localPt;
+  }
+  else if (ext === 3 && this.opts.threeFingerDrag && this.ctx.isOn('threeFingerDrag')) {
+    if (st.gcr.canSwitch(ext) && !st.gcr.current()) st.gcr.acquire('threeDrag', ext);
+    if (st.gcr.current() === 'threeDrag') {
+      await this.ctx.bus.emit('gesture:pinch', false);
+      await this.ctx.drag.start3?.();
       this._lastTwoCenter = null;
-
-      this.ctx.window.exit?.();
-      st.gcr.release();
-
-      // 2) Clear dwell state explicitly (anchor + timers) and DO NOT tick dwell
-      this.store.set({ dwellAnchor: null, dwellStartTs: 0, dwellCooldownTs: 0 });
-      // If your dwell MW exposes a stop/reset, call it too:
-      this.ctx.dwell?.stop?.(); // safe if undefined
-
-      // 3) Clear 5F hold + snap-cycle timing
-      this.store.set({ fiveOpenStart: 0, lastFivePinchTs: 0 });
-      try { await this.ctx.window.snapCycle?.(false, 0); } catch {}
-
-      // 4) HUD + exit
-      this.onHUD({ hands: 0, profile: this.profiles.current() });
-      return;
     }
+  } else if (ext !== 3 && this.opts.threeFingerDrag) {
+    await this.ctx.drag.end3?.();
+    if (st.gcr.current() === 'threeDrag') st.gcr.release();
+  }
 
+  // OS swipes when not in window modes
+  if (this.ctx.isOn('osSwipes') && ext === 4 && st.windowMode === 'none' && (!st.gcr.current() || st.gcr.current() === 'windowMove')) {
+    await this.ctx.os.swipes(hand);
+  }
 
-    const hand = frame.hands[0] || {};
-    const pinch = hand.pinchStrength || hand.pinch || 0;
-    const grab  = hand.grabStrength  || hand.grab  || 0;
-    const ext   = Array.isArray(hand.fingers) ? hand.fingers.filter(f=>f.extended).length : 0;
+  // snap cycle tap (4F quick pinch)
+  if (this.ctx.isOn('snapCycle')) {
+    await this.ctx.window.snapCycle((pinch >= CFG.pinchOn && pinch <= 0.9), ext);
+  }
 
-    // cursor mapping (always compute localPt for HUD; move only if enabled)
-    // cursor mapping (compute localPt for HUD; move only if palm is fully open)
-    let localPt;
-    {
-      const tip = (hand.indexFinger && hand.indexFinger.stabilizedTipPosition) || hand.stabilizedPalmPosition || [0.5,0.5,0];
-      const n = iBox.normalizePoint(tip, true);
-      const nx = Math.max(0, Math.min(1, n[0]));
-      const ny = Math.max(0, Math.min(1, n[1]));
-      localPt = this.ctx._mapToScreen(nx, ny);
-    }
-
-    // palm-open heuristic: all/most fingers extended AND low grabStrength
-    const fingers = Array.isArray(hand.fingers) ? hand.fingers : [];
-    const extendedCount = fingers.filter(f => f.extended).length;
-    // const palmOpen = (extendedCount >= 5) && (grab <= 0.2);
-    const palmOpen = (extendedCount >= 4) && (grab <= 0.2);
-
-    if (this.ctx.isOn('cursor') && palmOpen) {
-      await this._moveMouseSmooth(localPt);
-    }
-
-
-    // recorder + trainer capture
-    this.ctx.recorder?.capture?.(iBox, hand);
-    this.ctx.trainer?.capture?.(iBox, hand);
-
-    // calibration flow
-    if (st.cal.active) {
-      if (st.cal.step === 'A' && pinch > 0.85) { st.cal.A = { nx: localPt.x, ny: localPt.y }; st.cal.step = 'B'; this.onCalState({ mode:'progress', step:'B' }); }
-      else if (st.cal.step === 'B' && pinch > 0.85) { st.cal.B = { nx: localPt.x, ny: localPt.y }; this._finishCalibration(); }
-      this._emitHUD(ext, pinch, grab, localPt); return;
-    }
-
-    // enter/exit window modes
-    if (ext === 4 && this.ctx.isOn('windowMove')) {
-      if (pinch >= 0.8 && st.windowMode !== 'move' && st.gcr.canSwitch(ext)) this.ctx.window.enter('move', { x: localPt.x, y: localPt.y }, hand);
-      if (pinch <= 0.6 && st.windowMode === 'move') { this.ctx.window.exit(); st.gcr.release(); }
-    } else if (ext >= 5 && this.ctx.isOn('windowResize')) {
-      if (pinch >= 0.8 && st.windowMode !== 'resize' && st.gcr.canSwitch(ext)) this.ctx.window.enter('resize', { x: localPt.x, y: localPt.y }, hand);
-      if (pinch <= 0.6 && st.windowMode === 'resize') { this.ctx.window.exit(); st.gcr.release(); }
-    } else if (ext <= 3 && st.windowMode !== 'none') {
-      this.ctx.window.exit();
-      st.gcr.release();
-    }
-
-    await this.ctx.window.tick({ x: localPt.x, y: localPt.y }, hand);
-
-    // profile three-swipe bindings (when 3F-drag disabled)
-    if (await this.ctx.threeSwipe?.maybe?.(hand, ext)) {
-      this._emitHUD(ext, pinch, grab, localPt);
-      return;
-    }
-
-    // regular gestures
-   if (ext === 1) {
-      // Robust index-only: index extended, all others NOT extended.
-      const fingers = Array.isArray(hand.fingers) ? hand.fingers : [];
-      const index = hand.indexFinger || fingers.find(f => f.type === 1) || null;
-      const othersExtended = fingers.filter(f => f !== index && f.extended).length;
-
-      // Optional: require a bit of "grip" to ensure the other fingers are actually curled
-      const gripEnough = (grab >= 0.35); // tune 0.3–0.5 as needed
-
-      const indexOnly = !!(index && index.extended && othersExtended === 0 && gripEnough);
-
-      // 1F drag path (unchanged)
-      if (
-        this.ctx.isOn('drag') &&
-        (grab >= CFG.grabOn || st.dragging) &&
-        (st.gcr.current() ? st.gcr.current() === 'drag' : st.gcr.acquire('drag', ext))
-      ) {
-        await this.ctx.drag.maybeStart?.();
-        await this.ctx.bus.emit('gesture:pinch', false);
-      } else {
-        // Click only when the index-only condition is satisfied
-        if (
-          this.ctx.isOn('pinchClick') &&
-          !st.dragging &&
-          (st.gcr.current() ? st.gcr.current() === 'pinch' : st.gcr.acquire('pinch', ext))
-        ) {
-          await this.ctx.bus.emit('gesture:pinch', indexOnly);
-        } else {
-          await this.ctx.bus.emit('gesture:pinch', false);
-        }
-
-        // End drag if grip released
-        if (grab <= CFG.grabOff && st.dragging) {
-          await mouse.releaseButton(Button.LEFT);
-          this.store.set({ dragging: false });
-          st.gcr.release();
-          this._tutor('Drag end');
-        }
-      }
-
-      this._lastTwoCenter = null;
-      await this.ctx.drag.end3?.();
-    }
-    else if (ext === 2 && this.ctx.isOn('scroll')) {
-      if (st.gcr.canSwitch(ext) && !st.gcr.current()) st.gcr.acquire('scroll', ext);
-      if (st.gcr.current() === 'scroll') {
-        await this.ctx.bus.emit('gesture:pinch', false);
-        await this.ctx.drag.end3?.();
-        await this.ctx.scroll.handle(hand, iBox);
-
-        if (st.windowMode === 'move') {
-          if (!this._lastTwoCenter) this._lastTwoCenter = localPt;
-          const dx = (localPt.x - this._lastTwoCenter.x);
-          const dy = (localPt.y - this._lastTwoCenter.y);
-          await this.ctx.window.snapSwipes(hand, dx, dy);
-        }
-      }
-      this._lastTwoCenter = localPt;
-    }
-    else if (ext === 3 && this.opts.threeFingerDrag && this.ctx.isOn('threeFingerDrag')) {
-      if (st.gcr.canSwitch(ext) && !st.gcr.current()) st.gcr.acquire('threeDrag', ext);
-      if (st.gcr.current() === 'threeDrag') {
-        await this.ctx.bus.emit('gesture:pinch', false);
-        await this.ctx.drag.start3?.();
-        this._lastTwoCenter = null;
-      }
-    } else if (ext !== 3 && this.opts.threeFingerDrag) {
-      await this.ctx.drag.end3?.();
-      if (st.gcr.current() === 'threeDrag') st.gcr.release();
-    }
-
-    // OS swipes when not in window modes
-    if (this.ctx.isOn('osSwipes') && ext === 4 && st.windowMode === 'none' && (!st.gcr.current() || st.gcr.current() === 'windowMove')) {
-      await this.ctx.os.swipes(hand);
-    }
-
-    // snap cycle tap (4F quick pinch)
-    if (this.ctx.isOn('snapCycle')) {
-      await this.ctx.window.snapCycle((pinch >= CFG.pinchOn && pinch <= 0.9), ext);
-    }
-
-    // 5F utilities (show desktop / launchpad) when not resizing
-    if (ext >= 5 && st.windowMode !== 'resize') {
-      const extF = Array.isArray(hand.fingers) ? hand.fingers.filter(f=>f.extended).length : 0;
-      if (extF >= 5) {
-        if (!st.fiveOpenStart) this.store.set({ fiveOpenStart: now() });
-        if (now() - this.store.get().fiveOpenStart >= CFG.fiveHoldMs) {
-          this.store.set({ fiveOpenStart: 0 });
-          if (this.ctx.isOn('showDesktop')) { await keyChord(OS.showDesktop); this._tutor('Show Desktop'); }
-        }
-      } else {
+  // 5F utilities (show desktop / launchpad) when not resizing
+  if (ext >= 5 && st.windowMode !== 'resize') {
+    const extF = fingers.filter(f=>f.extended).length;
+    if (extF >= 5) {
+      if (!st.fiveOpenStart) this.store.set({ fiveOpenStart: now() });
+      if (now() - this.store.get().fiveOpenStart >= CFG.fiveHoldMs) {
         this.store.set({ fiveOpenStart: 0 });
-      }
-      if (extF >= 4 && pinch > 0.9 && now() - st.lastFivePinchTs > 1200) {
-        this.store.set({ lastFivePinchTs: now() });
-        if (this.ctx.isOn('launchpad')) { await keyChord(OS.launchpad); this._tutor('Launchpad'); }
+        if (this.ctx.isOn('showDesktop')) { await keyChord(OS.showDesktop); this._tutor('Show Desktop'); }
       }
     } else {
       this.store.set({ fiveOpenStart: 0 });
     }
-
-    // Dwell click (only when hands present and feature enabled)
-    if (hands > 0 && this.ctx.isOn('dwellClick') && this.persist.dwell?.enabled) {
-      await this.ctx.dwell.tick();
-    } else {
-      this.ctx.dwell?.stop?.(); // no ticking when off
+    if (extF >= 4 && pinch > 0.9 && now() - st.lastFivePinchTs > 1200) {
+      this.store.set({ lastFivePinchTs: now() });
+      if (this.ctx.isOn('launchpad')) { await keyChord(OS.launchpad); this._tutor('Launchpad'); }
     }
-
-    // HUD
-    this.onHUD({
-      hands, ext, pinch:+(pinch||0).toFixed(2), grab:+(grab||0).toFixed(2),
-      x: Math.round(localPt.x), y: Math.round(localPt.y),
-      windowMode: st.windowMode, dragging: st.dragging || st.threeDrag,
-      calStep: st.cal.step, displayId: st.displayId, gcr: st.gcr.current(),
-      profile: this.profiles.current()
-    });
+  } else {
+    this.store.set({ fiveOpenStart: 0 });
   }
+
+  // Dwell click (only when feature enabled, hands present, and not clutching)
+  if (hands > 0 && this.ctx.isOn('dwellClick') && this.persist.dwell?.enabled && !clutchOn) {
+    await this.ctx.dwell.tick();
+  } else {
+    this.ctx.dwell?.stop?.();
+  }
+
+  // HUD
+  this.onHUD({
+    hands, ext, pinch:+(pinch||0).toFixed(2), grab:+(grab||0).toFixed(2),
+    x: Math.round(localPt.x), y: Math.round(localPt.y),
+    windowMode: st.windowMode, dragging: st.dragging || st.threeDrag,
+    calStep: st.cal.step, displayId: st.displayId, gcr: st.gcr.current(),
+    profile: this.profiles.current()
+  });
+}
+
 }
 
 module.exports = GestureEngine;

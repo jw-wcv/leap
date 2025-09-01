@@ -1,3 +1,4 @@
+// src/gestures/scroll.js
 async function handleTwoFingerScroll(ctx, hand, iBox) {
     const { persist, keyboard, Key, state, tutor } = ctx;
     const fingers = hand.fingers.filter(f=>f.extended);

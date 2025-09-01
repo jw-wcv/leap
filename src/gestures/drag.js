@@ -1,3 +1,4 @@
+// src/gestures/drag.js
 async function maybeStartDrag(ctx) {
     const { state, mouse, tutor } = ctx;
     if (!state.dragging) { await mouse.pressButton(ctx.Button.LEFT); state.dragging = true; tutor('Drag start'); }
