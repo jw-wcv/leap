@@ -213,8 +213,11 @@ CMAKE_TAPI:FILEPATH=/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeD
 // Studio IDE projects all commands are done without /nologo.
 CMAKE_VERBOSE_MAKEFILE:BOOL=FALSE
 
+//No help, variable specified on the command line.
+LEAP_SDK_ROOT:UNINITIALIZED=/Applications/Ultraleap Hand Tracking.app/Contents/LeapSDK
+
 //The directory containing a CMake configuration file for LeapSDK.
-LeapSDK_DIR:PATH=LeapSDK_DIR-NOTFOUND
+LeapSDK_DIR:PATH=/Applications/Ultraleap Hand Tracking.app/Contents/LeapSDK/lib/cmake/LeapSDK
 
 //Value Computed by CMake
 ultraleap_middleware_BINARY_DIR:STATIC=/Users/JJ/Documents/Projects/leap/cMiddleware/build
@@ -290,6 +293,8 @@ CMAKE_GENERATOR_INSTANCE:INTERNAL=
 CMAKE_GENERATOR_PLATFORM:INTERNAL=
 //Name of generator toolset.
 CMAKE_GENERATOR_TOOLSET:INTERNAL=
+//Test CMAKE_HAVE_LIBC_PTHREAD
+CMAKE_HAVE_LIBC_PTHREAD:INTERNAL=1
 //Source directory with the top level CMakeLists.txt file for this
 // project
 CMAKE_HOME_DIRECTORY:INTERNAL=/Users/JJ/Documents/Projects/leap/cMiddleware
@@ -359,4 +364,6 @@ CMAKE_TAPI-ADVANCED:INTERNAL=1
 CMAKE_UNAME:INTERNAL=/usr/bin/uname
 //ADVANCED property for variable: CMAKE_VERBOSE_MAKEFILE
 CMAKE_VERBOSE_MAKEFILE-ADVANCED:INTERNAL=1
+//Details about finding Threads
+FIND_PACKAGE_MESSAGE_DETAILS_Threads:INTERNAL=[TRUE][v()]
 

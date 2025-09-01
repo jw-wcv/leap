@@ -1,0 +1,3 @@
+/Users/JJ/Documents/Projects/leap/cMiddleware/build/CMakeFiles/ultraleap_middleware.dir
+/Users/JJ/Documents/Projects/leap/cMiddleware/build/CMakeFiles/edit_cache.dir
+/Users/JJ/Documents/Projects/leap/cMiddleware/build/CMakeFiles/rebuild_cache.dir

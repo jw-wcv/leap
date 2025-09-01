@@ -238,17 +238,32 @@ class GestureEngine {
     }
 
     if (hands === 0) {
-      if (st.dragging) { await mouse.releaseButton(Button.LEFT); this.store.set({ dragging:false }); this._tutor('Drag end'); }
+      // 1) Hard reset any click/drag/window state + pinch bus
+      try { await this.ctx.bus.emit('gesture:pinch', false); } catch {}
+      if (st.dragging) {
+        await mouse.releaseButton(Button.LEFT);
+        this.store.set({ dragging: false });
+      }
       await this.ctx.drag.end3?.();
       this._lastTwoCenter = null;
-      this.ctx.window.exit();
+
+      this.ctx.window.exit?.();
       st.gcr.release();
-      // Dwell service minimal to clear cooldowns
-      if (this.ctx.isOn('dwellClick') && this.persist.dwell?.enabled) await this.ctx.dwell.tick();
-      else this.ctx.dwell?.tick?.({ disabled:true });
+
+      // 2) Clear dwell state explicitly (anchor + timers) and DO NOT tick dwell
+      this.store.set({ dwellAnchor: null, dwellStartTs: 0, dwellCooldownTs: 0 });
+      // If your dwell MW exposes a stop/reset, call it too:
+      this.ctx.dwell?.stop?.(); // safe if undefined
+
+      // 3) Clear 5F hold + snap-cycle timing
+      this.store.set({ fiveOpenStart: 0, lastFivePinchTs: 0 });
+      try { await this.ctx.window.snapCycle?.(false, 0); } catch {}
+
+      // 4) HUD + exit
       this.onHUD({ hands: 0, profile: this.profiles.current() });
       return;
     }
+
 
     const hand = frame.hands[0] || {};
     const pinch = hand.pinchStrength || hand.pinch || 0;
@@ -256,6 +271,7 @@ class GestureEngine {
     const ext   = Array.isArray(hand.fingers) ? hand.fingers.filter(f=>f.extended).length : 0;
 
     // cursor mapping (always compute localPt for HUD; move only if enabled)
+    // cursor mapping (compute localPt for HUD; move only if palm is fully open)
     let localPt;
     {
       const tip = (hand.indexFinger && hand.indexFinger.stabilizedTipPosition) || hand.stabilizedPalmPosition || [0.5,0.5,0];
@@ -264,9 +280,17 @@ class GestureEngine {
       const ny = Math.max(0, Math.min(1, n[1]));
       localPt = this.ctx._mapToScreen(nx, ny);
     }
-    if (this.ctx.isOn('cursor')) {
+
+    // palm-open heuristic: all/most fingers extended AND low grabStrength
+    const fingers = Array.isArray(hand.fingers) ? hand.fingers : [];
+    const extendedCount = fingers.filter(f => f.extended).length;
+    // const palmOpen = (extendedCount >= 5) && (grab <= 0.2);
+    const palmOpen = (extendedCount >= 4) && (grab <= 0.2);
+
+    if (this.ctx.isOn('cursor') && palmOpen) {
       await this._moveMouseSmooth(localPt);
     }
+
 
     // recorder + trainer capture
     this.ctx.recorder?.capture?.(iBox, hand);
@@ -300,21 +324,46 @@ class GestureEngine {
     }
 
     // regular gestures
-    if (ext === 1) {
-      if (this.ctx.isOn('drag') && (grab >= CFG.grabOn || st.dragging) && (st.gcr.current() ? st.gcr.current()==='drag' : st.gcr.acquire('drag', ext))) {
+   if (ext === 1) {
+      // Robust index-only: index extended, all others NOT extended.
+      const fingers = Array.isArray(hand.fingers) ? hand.fingers : [];
+      const index = hand.indexFinger || fingers.find(f => f.type === 1) || null;
+      const othersExtended = fingers.filter(f => f !== index && f.extended).length;
+
+      // Optional: require a bit of "grip" to ensure the other fingers are actually curled
+      const gripEnough = (grab >= 0.35); // tune 0.3–0.5 as needed
+
+      const indexOnly = !!(index && index.extended && othersExtended === 0 && gripEnough);
+
+      // 1F drag path (unchanged)
+      if (
+        this.ctx.isOn('drag') &&
+        (grab >= CFG.grabOn || st.dragging) &&
+        (st.gcr.current() ? st.gcr.current() === 'drag' : st.gcr.acquire('drag', ext))
+      ) {
         await this.ctx.drag.maybeStart?.();
         await this.ctx.bus.emit('gesture:pinch', false);
       } else {
-        if (this.ctx.isOn('pinchClick') && !st.dragging && (st.gcr.current() ? st.gcr.current()==='pinch' : st.gcr.acquire('pinch', ext))) {
-          await this.ctx.bus.emit('gesture:pinch', pinch >= CFG.pinchOn);
+        // Click only when the index-only condition is satisfied
+        if (
+          this.ctx.isOn('pinchClick') &&
+          !st.dragging &&
+          (st.gcr.current() ? st.gcr.current() === 'pinch' : st.gcr.acquire('pinch', ext))
+        ) {
+          await this.ctx.bus.emit('gesture:pinch', indexOnly);
+        } else {
+          await this.ctx.bus.emit('gesture:pinch', false);
         }
+
+        // End drag if grip released
         if (grab <= CFG.grabOff && st.dragging) {
           await mouse.releaseButton(Button.LEFT);
-          this.store.set({ dragging:false });
+          this.store.set({ dragging: false });
           st.gcr.release();
           this._tutor('Drag end');
         }
       }
+
       this._lastTwoCenter = null;
       await this.ctx.drag.end3?.();
     }
@@ -376,11 +425,11 @@ class GestureEngine {
       this.store.set({ fiveOpenStart: 0 });
     }
 
-    // Dwell click
-    if (this.ctx.isOn('dwellClick') && this.persist.dwell?.enabled) {
+    // Dwell click (only when hands present and feature enabled)
+    if (hands > 0 && this.ctx.isOn('dwellClick') && this.persist.dwell?.enabled) {
       await this.ctx.dwell.tick();
     } else {
-      this.ctx.dwell?.tick?.({ disabled:true });
+      this.ctx.dwell?.stop?.(); // no ticking when off
     }
 
     // HUD

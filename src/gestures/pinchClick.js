@@ -1,3 +1,4 @@
+// src/gestures/pinchClick.js
 const { now } = require('../core/utils');
 
 function pinchClickInit(state, persist, tutor) {
@@ -11,28 +12,38 @@ function pinchClickInit(state, persist, tutor) {
 
 async function handlePinchClick(ctx, isPinching) {
   const { state, persist, tutor, mouse } = ctx;
-  const dblMs = persist.clicks.doublePinchMs || 350;
+  const dblMs = persist.clicks?.doublePinchMs ?? 350;
+  const tapMs = ctx.CFG?.pinchTapMs ?? 200;      // <-- fallback so taps register
 
   if (isPinching && !state.isPinching) {
-    state.isPinching = true; state.pinchStartTs = now();
+    state.isPinching = true;
+    state.pinchStartTs = now();
     return;
   }
   if (!isPinching && state.isPinching) {
-    const dur = now() - state.pinchStartTs; state.isPinching = false;
+    const dur = now() - (state.pinchStartTs || 0);
+    state.isPinching = false;
 
-    const validTap = dur <= ctx.CFG.pinchTapMs && !state.dragging && state.windowMode === 'none';
+    const validTap = dur <= tapMs && !state.dragging && state.windowMode === 'none';
     if (!validTap) return;
 
     const t = now();
-    state.tapCount = (t - state.lastTapTs <= dblMs) ? (state.tapCount + 1) : 1;
+    state.tapCount = (t - (state.lastTapTs || 0) <= dblMs) ? (state.tapCount + 1) : 1;
     state.lastTapTs = t;
     state.tapTimer && clearTimeout(state.tapTimer);
 
     state.tapTimer = setTimeout(async () => {
-      if (state.tapCount >= 3 && persist.clicks.enableMiddleTriple) { await mouse.click(ctx.Button.MIDDLE); tutor('Middle click'); }
-      else if (state.tapCount === 2)                                 { await mouse.click(ctx.Button.RIGHT);  tutor('Right click'); }
-      else                                                           { await mouse.click(ctx.Button.LEFT);   tutor('Click'); }
-      state.tapCount = 0;
+      try {
+        if (state.tapCount >= 3 && (persist.clicks?.enableMiddleTriple)) {
+          await mouse.click(ctx.Button.MIDDLE); tutor?.('Middle click');
+        } else if (state.tapCount === 2) {
+          await mouse.click(ctx.Button.RIGHT);  tutor?.('Right click');
+        } else {
+          await mouse.click(ctx.Button.LEFT);   tutor?.('Click');
+        }
+      } finally {
+        state.tapCount = 0;
+      }
     }, dblMs);
   }
 }

@@ -22,9 +22,28 @@ function mwWindow(ctx, next){
   };
   return next();
 }
-function mwDwell(ctx, next){ ctx.dwell = { tick: ()=>tickDwell(ctx) }; return next(); }
+
+function mwDwell(ctx, next) {
+  ctx.dwell = {
+    tick: (opts) => {
+      if (opts && opts.disabled) {
+        ctx.state.dwellAnchor = null;
+        ctx.state.dwellStartTs = 0;
+        return;
+      }
+      return tickDwell(ctx);
+    },
+    stop: () => {
+      ctx.state.dwellAnchor = null;
+      ctx.state.dwellStartTs = 0;
+    }
+  };
+  return next();
+}
+
 function mwOsSwipes(ctx, next){ ctx.os = { swipes: (hand)=>handleOsSwipes(ctx,hand) }; return next(); }
 function mwThreeSwipeBindings(ctx, next){ ctx.threeSwipe = { maybe: (hand,ext)=>maybeThreeSwipeBinding(ctx,hand,ext) }; return next(); }
+
 
 module.exports = [
   mwPinch,

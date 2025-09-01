@@ -1,0 +1,1 @@
+/usr/bin/cc  -arch arm64 -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/ultraleap_middleware.dir/leap_middleware.c.o -o ultraleap_middleware  -Wl,-rpath,@executable_path -Wl,-rpath,"/Applications/Ultraleap Hand Tracking.app/Contents/LeapSDK/lib" "/Applications/Ultraleap Hand Tracking.app/Contents/LeapSDK/lib/libLeapC.5.dylib"
