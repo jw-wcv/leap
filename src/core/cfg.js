@@ -18,6 +18,10 @@ module.exports = {
   zoomDistOff: 0.008,
   zoomDistToWheelScale: 300,
 
+
+  // Dwell: cancel if palm velocity exceeds this (mm/s)
+  minPalmVelForDwellCancel: 120,
+
   // Max duration (ms) to treat a pinch as a "tap" (click) when released
   pinchTapMs: 220,
 
