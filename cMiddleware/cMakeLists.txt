@@ -1,0 +1,25 @@
+cmake_minimum_required(VERSION 3.16)
+project(ultraleap_middleware C)
+
+if(APPLE)
+  # point at your actual bundle:
+  set(ULTRALEAP_SDK "/Applications/Ultraleap Hand Tracking.app/Contents/LeapSDK")
+endif()
+
+find_package(LeapSDK 5 REQUIRED PATHS "${ULTRALEAP_SDK}/lib/cmake/LeapSDK")
+find_package(Threads REQUIRED)
+
+add_executable(ultraleap_middleware leap_middleware.c)
+target_include_directories(ultraleap_middleware PRIVATE "${ULTRALEAP_SDK}/include")
+target_link_libraries(ultraleap_middleware PRIVATE LeapSDK::LeapC Threads::Threads)
+
+# copy the dylib next to the exe so dyld can load it
+add_custom_command(TARGET ultraleap_middleware POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          "$<TARGET_FILE:LeapSDK::LeapC>"
+          "$<TARGET_FILE_DIR:ultraleap_middleware>")
+
+# make @rpath resolve from the exe folder
+set_target_properties(ultraleap_middleware PROPERTIES
+  BUILD_RPATH "@executable_path"
+  INSTALL_RPATH "@executable_path")

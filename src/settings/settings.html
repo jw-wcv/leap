@@ -1,0 +1,95 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Settings</title>
+  <style>
+    body { font: 14px/1.4 -apple-system,system-ui,Segoe UI,Roboto,Helvetica,Arial; margin:16px; color:#111; }
+    h2 { margin: 18px 0 8px; }
+    fieldset { border:1px solid #ddd; border-radius:8px; padding:12px; margin-bottom:14px; }
+    label { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:6px 0; }
+    input[type="number"]{ width:120px; padding:6px; }
+    input[type="checkbox"]{ transform: scale(1.1); }
+    .row { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+    .actions { display:flex; gap:8px; margin-top:12px; }
+    button { padding:8px 12px; border:0; border-radius:8px; background:#0ea5e9; color:#fff; cursor:pointer; }
+    button.secondary { background:#666; }
+  </style>
+</head>
+<body>
+  <h1>Ultraleap — Settings</h1>
+
+  <fieldset>
+    <legend>Core toggles</legend>
+    <label>Three-finger drag <input id="threeFingerDrag" type="checkbox"></label>
+    <label>Cmd+Scroll zoom on 2F pinch <input id="zoomWithCmdScrollOnPinch" type="checkbox"></label>
+    <label>Profiles: auto (by app) <input id="profilesAuto" type="checkbox"></label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Pointer gain</legend>
+    <div class="row">
+      <label>Gain min <input id="pg_gainMin" type="number" step="0.1"></label>
+      <label>Gain max <input id="pg_gainMax" type="number" step="0.1"></label>
+      <label>Vel low (mm/s) <input id="pg_velLow" type="number" step="10"></label>
+      <label>Vel high (mm/s) <input id="pg_velHigh" type="number" step="10"></label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Scroll inertia</legend>
+    <label>Enabled <input id="si_enabled" type="checkbox"></label>
+    <div class="row">
+      <label>Decay (0..1) <input id="si_decay" type="number" step="0.01"></label>
+      <label>Burst scale <input id="si_burstScale" type="number" step="0.01"></label>
+      <label>Min step <input id="si_minStep" type="number" step="1"></label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Dwell click</legend>
+    <label>Enabled <input id="dw_enabled" type="checkbox"></label>
+    <div class="row">
+      <label>Hold ms <input id="dw_ms" type="number" step="50"></label>
+      <label>Radius px <input id="dw_radiusPx" type="number" step="1"></label>
+      <label>Cooldown ms <input id="dw_cooldownMs" type="number" step="50"></label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Clicks</legend>
+    <div class="row">
+      <label>Double-pinch window (ms) <input id="ck_doublePinchMs" type="number" step="10"></label>
+      <label>Triple pinch = middle click <input id="ck_enableMiddleTriple" type="checkbox"></label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Window control</legend>
+    <div class="row">
+      <label>Move sensitivity <input id="wc_windowMoveScale" type="number" step="0.1"></label>
+      <label>Resize sensitivity <input id="wc_windowResizeScale" type="number" step="0.1"></label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Swipe thresholds</legend>
+    <div class="row">
+      <label>OS swipe min vel (mm/s) <input id="th_swipeMinVel" type="number" step="10"></label>
+      <label>Move-mode snap min vel (mm/s) <input id="th_moveSnapSwipeVel" type="number" step="10"></label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Info</legend>
+    <div>Smoothing (lerp): <strong id="info_smoothing"></strong> (change in code if needed)</div>
+  </fieldset>
+
+  <div class="actions">
+    <button id="btnSave">Save</button>
+    <button id="btnOpenCfg" class="secondary">Open config folder</button>
+  </div>
+
+  <script src="./renderer.js"></script>
+</body>
+</html>

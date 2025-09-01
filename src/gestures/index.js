@@ -1,0 +1,37 @@
+// src/gestures/index.js
+const { pinchClickInit, handlePinchClick } = require('./pinchClick');
+const { maybeStartDrag, startThreeDrag, endThreeDrag } = require('./drag');
+const { handleTwoFingerScroll } = require('./scroll');
+const { enterWindowMode, exitWindowMode, tickWindowMode } = require('./windowModes');
+const { handleOsSwipes } = require('./osSwipes');
+const { maybeSnapCycle, maybeMoveModeSnapSwipes } = require('./snapCycle');
+const { tickDwell } = require('./dwellClick');
+const { maybeThreeSwipeBinding } = require('./threeSwipeBindings');
+
+// wrap into middlewares
+function mwPinch(ctx, next){ ctx.bus.on('gesture:pinch', (v)=>handlePinchClick(ctx, v)); pinchClickInit(ctx.state, ctx.persist, ctx.tutor); return next(); }
+function mwDrag(ctx, next){ ctx.drag = { maybeStart: ()=>maybeStartDrag(ctx), start3: ()=>startThreeDrag(ctx), end3: ()=>endThreeDrag(ctx) }; return next(); }
+function mwScroll(ctx, next){ ctx.scroll = { handle: (hand,iBox)=>handleTwoFingerScroll(ctx,hand,iBox) }; return next(); }
+function mwWindow(ctx, next){
+  ctx.window = {
+    enter: (mode,ref,hand)=>enterWindowMode(ctx,mode,ref,hand),
+    exit: ()=>exitWindowMode(ctx),
+    tick: (pt,hand)=>tickWindowMode(ctx,pt,hand),
+    snapCycle: (tap,ext)=>maybeSnapCycle(ctx,tap,ext),
+    snapSwipes: (hand,dx,dy)=>maybeMoveModeSnapSwipes(ctx,hand,dx,dy)
+  };
+  return next();
+}
+function mwDwell(ctx, next){ ctx.dwell = { tick: ()=>tickDwell(ctx) }; return next(); }
+function mwOsSwipes(ctx, next){ ctx.os = { swipes: (hand)=>handleOsSwipes(ctx,hand) }; return next(); }
+function mwThreeSwipeBindings(ctx, next){ ctx.threeSwipe = { maybe: (hand,ext)=>maybeThreeSwipeBinding(ctx,hand,ext) }; return next(); }
+
+module.exports = [
+  mwPinch,
+  mwDrag,
+  mwScroll,
+  mwWindow,
+  mwOsSwipes,
+  mwThreeSwipeBindings,
+  mwDwell,
+];
